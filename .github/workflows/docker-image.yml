@@ -3,9 +3,9 @@ name: Docker Image CI
 on:
   workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [ ivan/develop ]
   pull_request:
-    branches: [ master ]
+    branches: [ ivan/develop ]
 
 jobs:
 
@@ -21,7 +21,7 @@ jobs:
       uses: elgohr/Publish-Docker-Github-Action@3.04
       with:
         # The name of the image you would like to push
-        name: surdaft/minecraft-exporter
+        name: ivan114/minecraft-exporter
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
         registry: ghcr.io
