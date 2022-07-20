@@ -14,10 +14,10 @@ from prometheus_client import Metric, REGISTRY, start_http_server
 
 class MinecraftCollector(object):
     def __init__(self):
-        self.stats_directory = "/world/stats"
-        self.player_directory = "/world/playerdata"
-        self.advancements_directory = "/world/advancements"
-        self.better_questing = "/world/betterquesting"
+        self.stats_directory = os.environ['WORLD_DIR'] + "/stats"
+        self.player_directory = os.environ['WORLD_DIR'] + "/playerdata"
+        self.advancements_directory = os.environ['WORLD_DIR'] + "/advancements"
+        self.better_questing = os.environ['WORLD_DIR'] + "/betterquesting"
         self.player_map = dict()
         self.quests_enabled = False
 
@@ -27,7 +27,7 @@ class MinecraftCollector(object):
             self.rcon = MCRcon(os.environ['RCON_HOST'], os.environ['RCON_PASSWORD'], port=int(os.environ['RCON_PORT']))
             print("RCON is enabled for " + os.environ['RCON_HOST'])
 
-        if os.path.isdir(self.better_questing):
+        if 'ENABLE_QUESTING' in os.environ and os.environ['ENABLE_QUESTING'] == "True" and os.path.isdir(self.better_questing):
             self.quests_enabled = True
 
         schedule.every().day.at("01:00").do(self.flush_playernamecache)
@@ -186,15 +186,16 @@ class MinecraftCollector(object):
         data["stat.Score"] = nbtfile.get("Score").value
         data["stat.Health"] = nbtfile.get("Health").value
         data["stat.foodLevel"] = nbtfile.get("foodLevel").value
-        with open(self.advancements_directory + "/" + uuid + ".json") as json_file:
-            count = 0
-            advancements = json.load(json_file)
-            for key, value in advancements.items():
-                if key in ("DataVersion"):
-                    continue
-                if value["done"] == True:
-                    count += 1
-        data["stat.advancements"] = count
+        if 'ENABLE_ADVANCEMENTS' in os.environ and os.environ['ENABLE_ADVANCEMENTS'] == "True":
+            with open(self.advancements_directory + "/" + uuid + ".json") as json_file:
+                count = 0
+                advancements = json.load(json_file)
+                for key, value in advancements.items():
+                    if key in ("DataVersion"):
+                        continue
+                    if value["done"] == True:
+                        count += 1
+            data["stat.advancements"] = count
         if self.quests_enabled:
             data["stat.questsFinished"] = self.get_player_quests_finished(uuid)
         return data
@@ -231,13 +232,13 @@ class MinecraftCollector(object):
             if key in ("stats", "DataVersion"):
                 continue
             stat = key.split(".")[1]  # entityKilledBy
-            if stat == "mineBlock":
-                blocks_mined.add_sample("blocks_mined", value=value, labels={'player': name, 'block': '.'.join(
-                    (key.split(".")[2], key.split(".")[3]))})
-            elif stat == "pickup":
-                blocks_picked_up.add_sample("blocks_picked_up", value=value, labels={'player': name, 'block': '.'.join(
-                    (key.split(".")[2], key.split(".")[3]))})
-            elif stat == "entityKilledBy":
+            # if stat == "mineBlock":
+            #     blocks_mined.add_sample("blocks_mined", value=value, labels={'player': name, 'block': '.'.join(
+            #         (key.split(".")[2], key.split(".")[3]))})
+            # elif stat == "pickup":
+            #     blocks_picked_up.add_sample("blocks_picked_up", value=value, labels={'player': name, 'block': '.'.join(
+            #         (key.split(".")[2], key.split(".")[3]))})
+            if stat == "entityKilledBy":
                 if len(key.split(".")) == 4:
                     player_deaths.add_sample('player_deaths', value=value, labels={'player': name, 'cause': '.'.join(
                         (key.split(".")[2], key.split(".")[3]))})
@@ -281,9 +282,9 @@ class MinecraftCollector(object):
                 damage_dealt.add_sample('damage_dealt', value=value, labels={'player': name})
             elif stat == "damageTaken":
                 damage_dealt.add_sample('damage_taken', value=value, labels={'player': name})
-            elif stat == "craftItem":
-                blocks_crafted.add_sample('blocks_crafted', value=value, labels={'player': name, 'block': '.'.join(
-                    (key.split(".")[2], key.split(".")[3]))})
+            # elif stat == "craftItem":
+            #     blocks_crafted.add_sample('blocks_crafted', value=value, labels={'player': name, 'block': '.'.join(
+            #         (key.split(".")[2], key.split(".")[3]))})
             elif stat == "playOneMinute":
                 player_playtime.add_sample('player_playtime', value=value, labels={'player': name})
             elif stat == "advancements":
@@ -358,13 +359,14 @@ class MinecraftCollector(object):
                 player_used_crafting_table, player_quests_finished, mc_custom]
 
     def collect(self):
-        for player in self.get_players():
-            metrics = self.update_metrics_for_player(player)
-            if not metrics:
-                continue
+        if 'ENABLE_PLAYERS_METRICS' in os.environ and os.environ['ENABLE_PLAYERS_METRICS'] == "True":
+            for player in self.get_players():
+                metrics = self.update_metrics_for_player(player)
+                if not metrics:
+                    continue
 
-            for metric in metrics:
-                yield metric
+                for metric in metrics:
+                    yield metric
 
         for metric in self.get_server_stats():
             yield metric
@@ -383,7 +385,7 @@ if __name__ == '__main__':
 
     while True:
         try:
-            time.sleep(1)
+            time.sleep(15)
             schedule.run_pending()
         except MCRconException:
             # RCON timeout
